@@ -1,14 +1,15 @@
 # pollar-ticker
 
 Scrolling desktop news ticker for [Pollar](https://pollar.news/en), built on its public RSS feed.
-A slim always-on-top bar docked to the bottom (or top) of your screen. Headlines scroll continuously.
+A slim always-on-top bar at the top of your screen (default 700 px wide, centred). Headlines scroll continuously.
 
 ![pollar-ticker screenshot](docs/screenshot.png)
 
 ## Features
 - Live headlines with category tag, refreshed every 5 minutes
 - Hover pauses scrolling; click a headline to open it in your browser
-- Right-click menu: refresh, speed, opacity, move top/bottom, open pollar.news, quit
+- Drag anywhere to move; drag the left/right/bottom edge to resize (text scales with height); position and size are remembered
+- Right-click menu: refresh, speed, opacity, snap top/bottom, reset size, open pollar.news, quit
 - Settings remembered in `~/.config/pollar-ticker/config.json`
 - Other Pollar languages via `--feed`, e.g. `pollar-ticker --feed https://pollar.news/de/feed.xml`
 

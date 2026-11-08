@@ -59,7 +59,7 @@ class Ticker(QWidget):
         self.items, self.status = [], "Loading Pollar…"
         self.speed = cfg.get("speed", 60)        # px/s
         self.alpha = cfg.get("alpha", 200)
-        self.at_top = cfg.get("top", False)
+        self.at_top = cfg.get("top", True)
         self.paused = False
         self.x = 0.0
         self.segs = []                            # (x0, x1, item)
@@ -69,17 +69,53 @@ class Ticker(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMouseTracking(True)
         self.loaded.connect(self.layout_segments)
+        self.setMinimumSize(200, 22)
         self.font_ = QFont("Sans", 12)
         self.font_b = QFont("Sans", 12, QFont.Bold)
-        self.place()
+        self.place(initial=True)
+        self.apply_fonts()
+        self._save_t = QTimer(self); self._save_t.setSingleShot(True)
+        self._save_t.timeout.connect(self.save_geom)
         t = QTimer(self); t.timeout.connect(self.tick); t.start(16)
         r = QTimer(self); r.timeout.connect(self.refresh); r.start(refresh_min * 60_000)
         self.refresh()
 
-    def place(self):
+    def place(self, initial=False):
         g = QApplication.primaryScreen().geometry()
-        h = 34
-        self.setGeometry(g.x(), g.y() if self.at_top else g.y() + g.height() - h, g.width(), h)
+        w = min(self.cfg.get("w", 700), g.width())
+        h = self.cfg.get("h", 34)
+        if initial and "x" in self.cfg and "y" in self.cfg:
+            x, y = self.cfg["x"], self.cfg["y"]
+        else:
+            x = self.cfg.get("x", g.x() + (g.width() - w) // 2)
+            y = g.y() if self.at_top else g.y() + g.height() - h
+        self.setGeometry(x, y, w, h)
+
+    def apply_fonts(self):
+        px = max(9, int(self.height() * 0.36))
+        self.font_.setPixelSize(px); self.font_b.setPixelSize(px)
+        self.layout_segments()
+
+    def resizeEvent(self, e):
+        self.apply_fonts(); self._save_t.start(400)
+
+    def moveEvent(self, e):
+        self._save_t.start(400)
+
+    def save_geom(self):
+        g = self.geometry()
+        self.cfg.update(x=g.x(), y=g.y(), w=g.width(), h=g.height())
+        save_cfg(self.cfg)
+
+    EDGE = 8
+
+    def edge_at(self, pos):
+        x, y, w, h = pos.x(), pos.y(), self.width(), self.height()
+        e = Qt.Edges()
+        if x <= self.EDGE: e |= Qt.LeftEdge
+        if x >= w - self.EDGE: e |= Qt.RightEdge
+        if y >= h - 4: e |= Qt.BottomEdge
+        return e
 
     def refresh(self):
         def work():
@@ -149,13 +185,39 @@ class Ticker(QWidget):
     def leaveEvent(self, _): self.paused = False
 
     def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
+        if e.button() != Qt.LeftButton:
+            return
+        self._press = e.position()
+        self._moved = False
+        edge = self.edge_at(e.position())
+        if edge and self.windowHandle():
+            self.windowHandle().startSystemResize(edge)
+            self._press = None
+
+    def mouseMoveEvent(self, e):
+        edge = self.edge_at(e.position())
+        if edge & (Qt.LeftEdge | Qt.RightEdge) and not edge & Qt.BottomEdge:
+            self.setCursor(Qt.SizeHorCursor)
+        elif edge:
+            self.setCursor(Qt.SizeFDiagCursor if edge & Qt.RightEdge else Qt.SizeBDiagCursor
+                           if edge & Qt.LeftEdge else Qt.SizeVerCursor)
+        else:
+            self.setCursor(Qt.PointingHandCursor if self.item_at(e.position().x()) else Qt.SizeAllCursor)
+        # drag anywhere to move; a plain click opens the headline
+        pr = getattr(self, "_press", None)
+        if pr is not None and (e.buttons() & Qt.LeftButton) and \
+                (e.position() - pr).manhattanLength() > 6 and self.windowHandle():
+            self._moved = True
+            self._press = None
+            self.windowHandle().startSystemMove()
+
+    def mouseReleaseEvent(self, e):
+        pr = getattr(self, "_press", None)
+        if e.button() == Qt.LeftButton and pr is not None and not getattr(self, "_moved", False):
             it = self.item_at(e.position().x())
             if it and it["link"]:
                 webbrowser.open(it["link"])
-
-    def mouseMoveEvent(self, e):
-        self.setCursor(Qt.PointingHandCursor if self.item_at(e.position().x()) else Qt.ArrowCursor)
+        self._press = None
 
     def contextMenuEvent(self, e):
         m = QMenu(self)
@@ -164,8 +226,9 @@ class Ticker(QWidget):
         add("Refresh now", self.refresh)
         add("Faster", lambda: self.set(speed=min(self.speed + 20, 300)))
         add("Slower", lambda: self.set(speed=max(self.speed - 20, 10)))
-        add("Move to bottom" if self.at_top else "Move to top",
+        add("Snap to bottom" if self.at_top else "Snap to top",
             lambda: self.set(top=not self.at_top))
+        add("Reset size / position", self.reset_geom)
         add("More opaque", lambda: self.set(alpha=min(self.alpha + 40, 255)))
         add("More transparent", lambda: self.set(alpha=max(self.alpha - 40, 0)))
         m.addSeparator()
@@ -173,13 +236,21 @@ class Ticker(QWidget):
         add("Quit", QApplication.quit)
         m.exec(e.globalPos())
 
+    def reset_geom(self):
+        for k in ("x", "y", "w", "h"):
+            self.cfg.pop(k, None)
+        self.place()
+
     def set(self, **kw):
         self.speed = kw.get("speed", self.speed)
         self.alpha = kw.get("alpha", self.alpha)
         self.at_top = kw.get("top", self.at_top)
         self.cfg.update(speed=self.speed, alpha=self.alpha, top=self.at_top)
-        save_cfg(self.cfg)
-        self.place()
+        if "top" in kw:                      # snap vertically, keep x / size
+            g = QApplication.primaryScreen().geometry()
+            y = g.y() if self.at_top else g.y() + g.height() - self.height()
+            self.move(self.x(), y)
+        self.save_geom()
 
 
 def main():
@@ -187,6 +258,8 @@ def main():
     ap.add_argument("--feed", default=DEFAULT_FEED, help="RSS URL (e.g. https://pollar.news/de/feed.xml)")
     ap.add_argument("--refresh", type=int, default=5, help="refresh interval, minutes (min 2)")
     a = ap.parse_args()
+    if os.environ.get("DISPLAY"):          # XWayland: lets us position + stay on top
+        os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
     app = QApplication(sys.argv)
     app.setApplicationName("pollar-ticker")
     app.setDesktopFileName("pollar-ticker")
