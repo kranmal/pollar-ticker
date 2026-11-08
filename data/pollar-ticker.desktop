@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Pollar Ticker
+Comment=Scrolling Pollar news ticker
+Exec=pollar-ticker
+Icon=news-subscribe
+Categories=Network;News;
+StartupWMClass=pollar-ticker

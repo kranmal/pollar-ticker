@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pollar-ticker"
+version = "0.1.0"
+description = "Scrolling desktop news ticker for Pollar (pollar.news) via its public RSS feed"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = ["PySide6>=6.5"]
+
+[project.scripts]
+pollar-ticker = "pollar_ticker.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
