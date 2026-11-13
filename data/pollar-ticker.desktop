@@ -3,6 +3,6 @@ Type=Application
 Name=Pollar Ticker
 Comment=Scrolling Pollar news ticker
 Exec=pollar-ticker
-Icon=news-subscribe
+Icon=pollar-ticker
 Categories=Network;News;
 StartupWMClass=pollar-ticker
